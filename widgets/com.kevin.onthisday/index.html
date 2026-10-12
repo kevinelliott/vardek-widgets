@@ -10,7 +10,7 @@
   .feature{flex:1;min-width:0;display:flex;flex-direction:column}
   .date{font-size:1.15rem;color:var(--accent);font-weight:700;letter-spacing:.02em;text-transform:uppercase}
   .card{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0;position:relative}
-  .card .inner{transition:opacity .5s}
+  .card .inner{transition:opacity .5s;cursor:pointer}
   .card .yr{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:4.6rem;line-height:1;color:var(--text)}
   .card .yr .ago{font-family:-apple-system,sans-serif;font-size:1.1rem;color:var(--dim);font-weight:500;margin-left:12px}
   .card .txt{font-size:1.55rem;line-height:1.4;margin-top:14px;max-width:42ch}
@@ -20,6 +20,7 @@
   .aside{flex:0 0 30%;min-width:0;border-left:1px solid var(--border);padding-left:26px;display:flex;flex-direction:column;gap:16px;overflow:hidden}
   .grp .h{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}
   .grp .it{display:flex;gap:10px;padding:4px 0;font-size:.95rem;line-height:1.25}
+  .grp .it{cursor:pointer}.grp .it:hover .t{color:var(--text)}
   .grp .it .y{font-family:var(--mono);color:var(--accent);font-weight:700;flex:0 0 3em}
   .grp .it .t{color:var(--mid);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #status{position:fixed;left:30px;bottom:8px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
@@ -43,6 +44,12 @@
   var $=function(i){return document.getElementById(i)}, last=0, feat=[], idx=0, timer=null;
   function agoTxt(y){var d=new Date().getFullYear()-y;return d<=0?"":d+" year"+(d!==1?"s":"")+" ago"}
   function esc(s){return String(s).replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  var links=[];
+  $("inner").addEventListener("click",function(){if(feat[idx])openUrl(feat[idx].url)});
+  $("aside").addEventListener("click",function(ev){var it=ev.target.closest&&ev.target.closest(".it");if(it)openUrl(links[Number(it.dataset.i)])});
+  function dayUrl(){var n=new Date();return"https://en.wikipedia.org/wiki/"+n.toLocaleDateString("en-US",{month:"long"})+"_"+n.getDate()}
+  function pageUrl(e){var p=e&&e.pages&&e.pages[0],u=p&&p.content_urls&&p.content_urls.desktop&&p.content_urls.desktop.page;return u||dayUrl()}
+  function openUrl(u){if(/^https:\/\/en\.wikipedia\.org\//.test(u||"")){try{xemd.openLink(u)}catch(e){}}}
   function show(i){
     if(!feat.length)return;
     idx=(i+feat.length)%feat.length;var e=feat[idx];
@@ -58,16 +65,17 @@
     var now=new Date();
     $("date").textContent=now.toLocaleDateString([],{month:"long",day:"numeric"});
     var src=(settings.category==="events"?d.events:d.selected)||d.selected||d.events||[];
-    feat=src.slice(0,10).map(function(e){return{year:e.year,text:e.text}});
-    if(!feat.length){feat=[{year:now.getFullYear(),text:"No events found for today."}]}
+    feat=src.slice(0,10).map(function(e){return{year:e.year,text:e.text,url:pageUrl(e)}});
+    if(!feat.length){feat=[{year:now.getFullYear(),text:"No events found for today.",url:dayUrl()}]}
     $("dots").innerHTML=feat.map(function(){return"<i></i>"}).join("");
     idx=0;show(0);schedule();
     // aside: births + deaths
+    links=[];
     function grp(title,arr){if(!arr||!arr.length)return"";
       return '<div class="grp"><div class="h">'+title+'</div>'+arr.slice(0,4).map(function(e){
         var who=(e.pages&&e.pages[0]&&(e.pages[0].titles&&e.pages[0].titles.normalized))||e.text;
-        return '<div class="it"><span class="y">'+e.year+'</span><span class="t">'+esc(who)+'</span></div>'}).join("")+'</div>'}
-    $("aside").innerHTML=grp("Born",d.births)+grp("Died",d.deaths)+grp("Holidays",(d.holidays||[]).map(function(h){return{year:"·",text:h.text}}));
+        return '<div class="it" data-i="'+(links.push(pageUrl(e))-1)+'"><span class="y">'+e.year+'</span><span class="t">'+esc(who)+'</span></div>'}).join("")+'</div>'}
+    $("aside").innerHTML=grp("Born",d.births)+grp("Died",d.deaths)+grp("Holidays",(d.holidays||[]).map(function(h){return{year:"·",text:h.text,pages:h.pages}}));
     $("boot").classList.add("hidden");$("wrap").style.display="flex";
   }
   async function load(){
