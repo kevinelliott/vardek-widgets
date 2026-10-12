@@ -40,7 +40,7 @@
 <script type="module">
   import { xemd } from '/sdk/widget-sdk.js';
   var settings={rotateSec:9,category:"selected"};
-  var $=function(i){return document.getElementById(i)}, last=0, feat=[], idx=0, timer=null;
+  var $=function(i){return document.getElementById(i)}, last=0, seq=0, retry=null, feat=[], idx=0, timer=null;
   function agoTxt(y){var d=new Date().getFullYear()-y;return d<=0?"":d+" year"+(d!==1?"s":"")+" ago"}
   function esc(s){return String(s).replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
   function show(i){
@@ -70,16 +70,30 @@
     $("aside").innerHTML=grp("Born",d.births)+grp("Died",d.deaths)+grp("Holidays",(d.holidays||[]).map(function(h){return{year:"·",text:h.text}}));
     $("boot").classList.add("hidden");$("wrap").style.display="flex";
   }
+  async function getKind(kind,mm,dd){
+    var res=await xemd.proxy.fetch("https://en.wikipedia.org/api/rest_v1/feed/onthisday/"+kind+"/"+mm+"/"+dd,{headers:{Accept:"application/json"}});
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    return res.json();
+  }
+  // The combined "all" feed is ~1.7 MB, which the proxy can't hand back intact
+  // ("JSON Parse error"). Fetch the categories separately and render what loads.
   async function load(){
     if(Date.now()-last<30000)return; last=Date.now();
+    var mine=++seq;clearTimeout(retry);
     try{
       var n=new Date(),mm=String(n.getMonth()+1).padStart(2,"0"),dd=String(n.getDate()).padStart(2,"0");
-      var url="https://en.wikipedia.org/api/rest_v1/feed/onthisday/all/"+mm+"/"+dd;
-      var res=await xemd.proxy.fetch(url,{headers:{Accept:"application/json"}});
-      if(!res.ok)throw new Error("HTTP "+res.status);
-      render(await res.json());
-      $("status").className="";$("status").textContent="Wikipedia · "+n.toLocaleDateString([],{month:"short",day:"numeric"});
-    }catch(e){$("status").className="err";$("status").textContent="wikipedia: "+(e.message||e);if(!feat.length)$("boot").textContent="on-this-day unavailable"}
+      var kinds=["selected","births","deaths","holidays"];if(settings.category==="events")kinds.push("events");
+      var failed=[],firstErr="";
+      var parts=await Promise.all(kinds.map(function(k){return getKind(k,mm,dd).catch(function(e){failed.push(k);firstErr=firstErr||(e.message||String(e));return null})}));
+      if(mine!==seq)return; // a newer load (e.g. category switch) superseded this one
+      var d={};parts.forEach(function(p){if(p)Object.assign(d,p)});
+      if(failed.length===kinds.length)throw new Error(firstErr||"no data");
+      render(d);
+      $("status").className=failed.length?"err":"";
+      $("status").textContent="Wikipedia · "+n.toLocaleDateString([],{month:"short",day:"numeric"})+(failed.length?" · partial ("+failed.sort().join(", ")+")":"");
+      if(failed.length)retry=setTimeout(function(){last=0;load()},60000);
+    }catch(e){if(mine!==seq)return;$("status").className="err";$("status").textContent="wikipedia: "+(e.message||e);if(!feat.length)$("boot").textContent="on-this-day unavailable";
+      retry=setTimeout(function(){last=0;load()},60000)}
   }
   (async function(){
     try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
