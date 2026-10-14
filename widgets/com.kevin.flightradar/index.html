@@ -65,7 +65,19 @@
   }
   function isGround(a) { return a.alt_baro === "ground" || a.alt_baro === "grnd"; }
   function altFt(a) { return (typeof a.alt_baro === "number") ? a.alt_baro : null; }
-  function flStr(a) { if (isGround(a)) return "GND"; var v = altFt(a); return v == null ? "—" : "FL" + Math.max(0, Math.round(v / 100)); }
+  // Flight levels (hundreds of feet, 1013 hPa) apply only at/above the 18,000 ft US transition altitude.
+  function flStr(a) {
+    if (isGround(a)) return "GND"; var v = altFt(a); if (v == null) return "—";
+    var h = Math.round(v / 100);
+    if (h >= 180) return "FL" + h;
+    return Math.max(0, h * 100).toLocaleString("en-US") + " ft";
+  }
+  // Short form for the radar canvas, where space is tight: "FL252" or "4.5k".
+  function altShort(a) {
+    var v = altFt(a); if (v == null) return "";
+    var h = Math.round(v / 100);
+    return h >= 180 ? "FL" + h : (Math.max(0, h) / 10).toFixed(1) + "k";
+  }
   function altColor(a) {
     if (isGround(a)) return "#5a6f62"; var alt = altFt(a);
     if (alt == null) return "#8fb0a0";
@@ -138,7 +150,7 @@
       if (i < labelBudget && p.d < range * 0.95) {
         ctx.fillStyle = "rgba(205,230,216,.85)"; ctx.font = (9.5 * dpr) + "px " + "ui-monospace, monospace"; ctx.textAlign = "left";
         var cs = (a.flight || a.r || a.hex || "").trim();
-        var v = altFt(a), fl = v != null ? " " + Math.round(v / 100) : "";
+        var fl = altFt(a) != null ? " " + altShort(a) : "";
         ctx.fillText(cs + fl, p.x + 7 * dpr, p.y + 3 * dpr);
       }
     });
