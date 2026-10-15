@@ -89,19 +89,22 @@
     else if(illum<0.54)name=waxing?"First Quarter":"Last Quarter";
     else name=waxing?"Waxing Gibbous":"Waning Gibbous";
     return {age:age,illum:illum,name:name};}
-  function drawMoon(cv,age){var ctx=cv.getContext("2d"),W=cv.width,H=cv.height,r=W/2-6,cx=W/2,cy=H/2;
+  // Lit part = one half of the limb + half an ellipse for the terminator. With c=cos(2π·age)
+  // (1 new, 0 quarter, -1 full) the terminator sits at x = c·sqrt(r²-y²): it bulges toward the
+  // lit side for a crescent (c>0) and away from it for a gibbous moon (c<0), so the area is
+  // (1-c)/2 of the disc, matching the "% illuminated" figure. Waxing is lit on the right as seen
+  // from the northern hemisphere; southern viewers see it mirrored.
+  function drawMoon(cv,age,lat){var ctx=cv.getContext("2d"),W=cv.width,H=cv.height,r=W/2-6,cx=W/2,cy=H/2,PI=Math.PI;
     ctx.clearRect(0,0,W,H);ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fillStyle="#2a2f3a";ctx.fill();
-    // lit fraction via terminator
-    ctx.save();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.clip();
-    var phase=age; // 0..1
-    for(var x=-r;x<=r;x++){var frac=x/r; // -1..1
-      // terminator position
-      var cosPhase=Math.cos(phase*2*Math.PI);
-      var lit; var term=cosPhase; 
-      if(phase<0.5){lit=(frac> term)?1:0;}else{lit=(frac< -term)?1:0;}
-      if(lit){ctx.fillStyle="#e8e0c8";ctx.fillRect(cx+x,cy-r,1,2*r);}
-    }
-    ctx.restore();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.strokeStyle="#3a4152";ctx.lineWidth=1.5;ctx.stroke();}
+    var c=Math.cos(age*2*PI),waxing=age<0.5;
+    if(lat<0)waxing=!waxing;
+    ctx.beginPath();
+    if(waxing){ctx.arc(cx,cy,r,-PI/2,PI/2,false);   // right limb, top to bottom
+      if(c>0)ctx.ellipse(cx,cy,c*r,r,0,PI/2,-PI/2,true);else ctx.ellipse(cx,cy,-c*r,r,0,PI/2,3*PI/2,false)}
+    else{ctx.arc(cx,cy,r,-PI/2,PI/2,true);          // left limb, top to bottom
+      if(c>0)ctx.ellipse(cx,cy,c*r,r,0,PI/2,3*PI/2,false);else ctx.ellipse(cx,cy,-c*r,r,0,PI/2,-PI/2,true)}
+    ctx.closePath();ctx.fillStyle="#e8e0c8";ctx.fill();
+    ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.strokeStyle="#3a4152";ctx.lineWidth=1.5;ctx.stroke();}
   function drawTimeline(segs,moonUp,sunsetT,sunriseT,darkStart,darkEnd){
     var cv=$("tl"),ctx=cv.getContext("2d"),dpr=Math.min(window.devicePixelRatio||1,2);
     var W=Math.round(cv.clientWidth*dpr),H=Math.round(cv.clientHeight*dpr);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
@@ -147,7 +150,7 @@
     // moon
     var mp=moonPhase(jd(now));
     $("moonph").textContent=mp.name;$("moonil").textContent=Math.round(mp.illum*100)+"% illuminated";
-    drawMoon($("disc"),mp.age);
+    drawMoon($("disc"),mp.age,lat);
     var moonset=findCross(moon,t0,t1,lat,lon,-0.566,-1),moonrise=findCross(moon,t0,t1,lat,lon,-0.566,+1);
     $("moonrs").textContent="Moonrise "+hm(moonrise)+"\nMoonset "+hm(moonset);
     $("moonrs").innerHTML="Moonrise "+hm(moonrise)+"<br>Moonset "+hm(moonset);
