@@ -13,7 +13,6 @@ widgets/**/.photocache.json
 
 # daemon-downloaded media (regenerated locally; not source)
 widgets/com.kevin.photoframe/img/
-widgets/com.kevin.apod/img/
 widgets/com.kevin.xkcd/img/
 widgets/com.kevin.epic/img/
 widgets/com.kevin.art/img/

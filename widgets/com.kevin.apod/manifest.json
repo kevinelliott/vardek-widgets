@@ -1,12 +1,15 @@
 {
   "id": "com.kevin.apod",
   "name": "Astronomy Picture",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "entry": "index.html",
   "subscriptions": [],
-  "refreshInterval": 60,
+  "refreshInterval": 1800,
   "permissions": {
-    "proxy": [],
+    "proxy": [
+      "https://science.nasa.gov/**",
+      "https://assets.science.nasa.gov/**"
+    ],
     "secrets": []
   },
   "sizes": [

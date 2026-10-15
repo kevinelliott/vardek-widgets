@@ -26,37 +26,95 @@
   <div id="stage"><img id="img" alt=""></div>
   <div id="cap"><div class="date" id="date"></div><div class="title" id="title"></div><div class="exp" id="exp"></div><div class="by" id="by"></div></div>
   <div id="vid"><div class="t" id="vt"></div><div class="e" id="ve"></div><div class="n">Video APOD — view at apod.nasa.gov</div></div>
-  <div id="boot">Waiting for apodd…<br><span style="font-size:.8rem;opacity:.7">run apodd once, or load its LaunchAgent</span></div>
-<script>
-(function(){
-  "use strict";
-  var settings={showText:true,kenBurns:true};var $=function(i){return document.getElementById(i)};var key="";
-  function apply(){settings=Object.assign(settings,(window.Vardek&&Vardek.settings)||{});
-    document.body.classList.toggle("kb",settings.kenBurns!==false)}
-  function render(d){
-    if(d.media_type==="video"||!d.file){
-      $("vid").style.display="flex";$("cap").style.display="none";$("img").classList.remove("show");
-      $("vt").textContent=d.title||"";$("ve").textContent=d.explanation||"";
-      $("boot").classList.add("hidden");return;
+  <div id="boot">Loading today's picture…</div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var FEED = "https://science.nasa.gov/wp-json/wp/v2/apod-basic?per_page=5", IMG_W = 1600, CACHE = "apod.last";
+  var settings = { showText: true, kenBurns: true }, $ = function (i) { return document.getElementById(i); };
+  var shown = "", busy = false, retryT = null;
+
+  // Feed text is HTML ("<br>", entities); reduce it to plain text without executing anything.
+  function clean(h) {
+    var t = new DOMParser().parseFromString(String(h || "").replace(/<br\s*\/?>/gi, " "), "text/html").body.textContent || "";
+    return t.replace(/\s+/g, " ").trim();
+  }
+  function explanation(raw) { return clean(raw).replace(/^Explanation:\s*/, "").split(/\s*Tomorrow's picture:/)[0].trim(); }
+  // NASA's dynamicimage URLs take a width; ask for a screen-sized image instead of the 4K original.
+  // new URL() also percent-encodes non-ASCII characters in the path.
+  function imgSrc(item) {
+    var raw = item.hdurl; if (!raw || /(^|[^a-z])logo([^a-z]|$)/.test(raw.toLowerCase())) return null;
+    try { var u = new URL(raw); if (/\/dynamicimage\//.test(u.pathname)) { u.searchParams.set("w", Math.min(IMG_W, Number(u.searchParams.get("w")) || IMG_W)); u.searchParams.delete("h"); } return u.href; }
+    catch (e) { return null; }
+  }
+  function loads(src) {
+    return new Promise(function (ok) {
+      var im = new Image(), t = setTimeout(function () { done(false); }, 10000);
+      function done(v) { clearTimeout(t); im.onload = im.onerror = null; if (!v) im.src = ""; ok(v); }
+      im.onload = function () { done(im.naturalWidth >= 200); };  // tiny images are placeholders, not pictures
+      im.onerror = function () { done(false); };
+      im.src = src;
+    });
+  }
+  function within(p, ms) {
+    return Promise.race([p, new Promise(function (_, no) { setTimeout(function () { no(new Error("timed out")); }, ms); })]);
+  }
+  function record(item, src) {
+    return { date: item.date || "", title: clean(item.title), explanation: explanation(item.explanation),
+      credit: clean(item.credit || item.copyright), video: item.media_type !== "image", src: src };
+  }
+  // The feed is newest-first: show the first entry that is a video or an image that really loads.
+  async function pick(items) {
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it.media_type !== "image") return record(it, null);
+      var src = imgSrc(it);
+      if (src && await loads(src)) return record(it, src);
     }
-    $("vid").style.display="none";
-    var img=$("img");img.onload=function(){img.classList.add("show");$("boot").classList.add("hidden")};
-    img.src=d.file+"?d="+(d.date||"");
-    $("date").textContent=d.date||"";$("title").textContent=d.title||"";
-    $("exp").textContent=d.explanation||"";
-    $("by").textContent=d.copyright?("© "+d.copyright):"NASA APOD";
-    document.body.classList.toggle("cap",settings.showText!==false);
-    document.body.classList.toggle("kb",settings.kenBurns!==false);
+    return null;
   }
-  function load(){
-    var s=document.createElement("script");s.src="data.js?v="+Date.now();
-    s.onload=function(){s.remove();var d=window.__APOD__;if(!d)return;var k=(d.date||"")+"|"+(d.file||"");if(k!==key){key=k;render(d)}};
-    s.onerror=function(){s.remove();if(!key)$("boot").textContent="apodd not running — see README"};
-    document.head.appendChild(s);
+  function render(d) {
+    var k = d.date + "|" + d.src; if (k === shown) return; shown = k;
+    if (d.video || !d.src) {
+      $("vid").style.display = "flex"; $("cap").style.display = "none"; $("img").classList.remove("show");
+      $("vt").textContent = d.title; $("ve").textContent = d.explanation; $("boot").classList.add("hidden"); return;
+    }
+    $("vid").style.display = "none"; $("cap").style.display = "";
+    var img = $("img"); img.classList.remove("show");
+    img.onload = function () { img.classList.add("show"); $("boot").classList.add("hidden"); };
+    img.onerror = function () { shown = ""; $("boot").classList.remove("hidden"); $("boot").textContent = "Image failed to load"; retrySoon(); };
+    img.src = d.src;
+    $("date").textContent = d.date; $("title").textContent = d.title; $("exp").textContent = d.explanation;
+    $("by").textContent = d.credit ? "Credit: " + d.credit : "NASA APOD";
   }
-  if(window.Vardek&&Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);
-    document.body.classList.toggle("cap",settings.showText!==false);document.body.classList.toggle("kb",settings.kenBurns!==false)});
-  if(window.Vardek&&Vardek.onRefresh)Vardek.onRefresh(load);
-  apply();load();setInterval(load,120000);
-})();
+  function applySettings() {
+    document.body.classList.toggle("cap", settings.showText !== false);
+    document.body.classList.toggle("kb", settings.kenBurns !== false);
+  }
+  // Remembered between runs if the sandbox allows storage; otherwise the picture just stays on screen.
+  function remember(d) { try { localStorage.setItem(CACHE, JSON.stringify(d)); } catch (e) {} }
+  function recall() { try { return JSON.parse(localStorage.getItem(CACHE) || "null"); } catch (e) { return null; } }
+
+  function retrySoon() { clearTimeout(retryT); retryT = setTimeout(load, 60000); }
+
+  async function load() {
+    if (busy) return; busy = true;
+    try {
+      var res = await within(xemd.proxy.fetch(FEED, { headers: { Accept: "application/json" } }), 20000);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      var d = await pick(await within(res.json(), 20000));
+      if (!d) throw new Error("no usable entry");
+      render(d); remember(d);
+    } catch (e) {
+      if (!shown) { var c = recall(); if (c && c.date && (c.src || c.video)) render(c); else $("boot").textContent = "NASA APOD unavailable: " + (e.message || e); }
+    } finally { busy = false; if (!shown) retrySoon(); }
+  }
+
+  (async function () {
+    try { var s = await Promise.race([xemd.settings.get(), new Promise(function (r) { setTimeout(function () { r(null); }, 1500); })]); if (s) settings = Object.assign(settings, s); } catch (e) {}
+    applySettings();
+    xemd.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); applySettings(); });
+    xemd.onRefresh(load);
+    xemd.ready();
+    load();
+  })();
 </script></body></html>
